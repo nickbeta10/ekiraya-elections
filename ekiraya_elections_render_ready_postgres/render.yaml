@@ -1,0 +1,16 @@
+
+services:
+  - type: web
+    name: ekiraya-elections
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node scripts/init_db.js && node server.js
+    envVars:
+      - key: NODE_VERSION
+        value: 18
+      - key: ADMIN_CODE
+        value: ADMIN-2025
+      - key: DATABASE_URL
+        # The PostgreSQL connection string. Set this in Render dashboard after deployment.
+        value: ""
