@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: ekiraya-elections
+    env: node
+    plan: free
+    buildCommand: |
+      rm -rf app
+      mkdir app
+      unzip -o ekiraya_elections_render_ready.zip -d app
+      cd app
+      npm install
+    startCommand: |
+      cd app
+      node scripts/init_db.js
+      node server.js
+    disk:
+      name: elections-disk
+      mountPath: /var/data/ekiraya
+      sizeGB: 1
+    envVars:
+      - key: ELECTIONS_DB_PATH
+        value: /var/data/ekiraya/elections.db
+      - key: ADMIN_CODE
+        value: ADMIN-2025
