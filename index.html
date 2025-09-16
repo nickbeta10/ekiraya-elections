@@ -1,0 +1,132 @@
+
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Elecciones Ekirayá · Anicora</title>
+  <link rel="stylesheet" href="/style.css"/>
+</head>
+<body>
+  <div class="container">
+    <div class="logo-row">
+      <img src="https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/school.svg" alt="Ekirayá"/>
+      <img src="https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/googleclassroom.svg" alt="Anicora"/>
+      <h1>Formulario de Votación</h1>
+    </div>
+    <div class="card" id="mesa-login-card">
+      <h2>Ingreso por Mesa <span class="badge">Solo jurados</span></h2>
+      <label>Código de la mesa</label>
+      <input id="mesaCode" placeholder="Ej: MESA-4-2025"/>
+      <button id="btnMesaLogin">Entrar</button>
+      <small>Este equipo quedará bloqueado a esta mesa. Para cambiarla, limpiar el almacenamiento del navegador.</small>
+    </div>
+
+    <div class="card" id="vote-card" style="display:none">
+      <h2>Votación</h2>
+      <div class="notice">Privacidad: tu voto es secreto. Usamos un PIN de un solo uso para evitar suplantación, pero el voto queda almacenado sin tu identidad.</div>
+      <div class="row">
+        <div>
+          <label>Número de Identificación</label>
+          <input id="dni" placeholder="Documento"/>
+        </div>
+        <div>
+          <label>PIN (OTP) de un solo uso</label>
+          <input id="otp" placeholder="6 dígitos entregados al estudiante"/>
+        </div>
+      </div>
+      <button id="btnCheck">Validar identidad</button>
+      <div id="voterInfo"></div>
+      <div id="ballots" style="display:none">
+        <h3>Boletas</h3>
+        <div id="race-rep" class="card"></div>
+        <div id="race-amb" class="card"></div>
+        <div id="race-per" class="card"></div>
+        <div class="row">
+          <button id="btnCast">Enviar Voto</button>
+          <button id="btnClear">Limpiar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="mesa-ledger" style="display:none">
+      <h2>Registro de esta Mesa</h2>
+      <table class="table" id="ledgerTable">
+        <thead><tr><th>Hora</th><th>Boleta</th><th>Razas incluidos</th><th>Hash</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+<script type="module">
+const api = (path, opts={})=>fetch(path,{headers:{"Content-Type":"application/json","X-Mesa-Key":localStorage.getItem("mesaKey")||""},...opts}).then(r=>r.json());
+const el = id=>document.getElementById(id);
+
+function renderOptions(container, race, options){
+  const name = "opt-"+race;
+  container.innerHTML = "<h3>"+options.title+"</h3>"+options.candidates.map(c=>`
+    <label><input type="radio" name="${name}" value="${c.id}"/> ${c.name} <small>${c.detail||""}</small></label>
+  `).join("") + `<label><input type="radio" name="${name}" value="BLANCO"/> Voto en blanco</label>`;
+}
+
+async function loadLedger(){
+  const data = await api("/api/mesa/ledger");
+  const tbody = document.querySelector("#ledgerTable tbody");
+  tbody.innerHTML = data.items.map(i=>`<tr><td>${new Date(i.timestamp).toLocaleTimeString()}</td><td>${i.ballot_id}</td><td>${i.races.join(", ")}</td><td><small>${i.audit_hash}</small></td></tr>`).join("");
+}
+
+document.getElementById("btnMesaLogin").onclick = async ()=>{
+  const mesaCode = el("mesaCode").value.trim();
+  const res = await api("/api/mesa/login",{method:"POST",body:JSON.stringify({mesa_code:mesaCode})});
+  if(res.ok){
+    localStorage.setItem("mesaKey",res.mesa_key);
+    el("mesa-login-card").style.display="none";
+    el("vote-card").style.display="";
+    el("mesa-ledger").style.display="";
+    await loadLedger();
+  }else alert(res.error||"Código incorrecto");
+};
+
+document.getElementById("btnCheck").onclick = async ()=>{
+  const dni = el("dni").value.trim();
+  const otp = el("otp").value.trim();
+  const res = await api("/api/voter/verify",{method:"POST",body:JSON.stringify({dni,otp})});
+  if(!res.ok){ alert(res.error); return; }
+  el("voterInfo").innerHTML = `<div class="notice">Estudiante: <b>${res.voter.name}</b> — Curso: <b>${res.voter.course}</b></div>`;
+  // render races based on course
+  renderOptions(el("race-rep"),"rep",res.races.rep);
+  renderOptions(el("race-amb"),"amb",res.races.amb);
+  renderOptions(el("race-per"),"per",res.races.per);
+  el("ballots").style.display="";
+};
+
+document.getElementById("btnCast").onclick = async ()=>{
+  const dni = el("dni").value.trim(), otp = el("otp").value.trim();
+  const getChecked = name => {
+    const r=document.querySelector(`input[name="opt-${name}"]:checked`);
+    return r? r.value:null;
+  };
+  const payload = {dni,otp,
+    rep:getChecked("rep"),
+    amb:getChecked("amb"),
+    per:getChecked("per"),
+  };
+  const res = await api("/api/vote/cast",{method:"POST",body:JSON.stringify(payload)});
+  if(res.ok){
+    alert("Voto registrado. Código de recibo: "+res.receipt);
+    el("ballots").style.display="none";
+    el("dni").value=""; el("otp").value="";
+    await loadLedger();
+  }else alert(res.error||"No se pudo votar");
+};
+
+document.getElementById("btnClear").onclick=()=>{el("ballots").style.display="none"};
+
+if(localStorage.getItem("mesaKey")){
+  el("mesa-login-card").style.display="none";
+  el("vote-card").style.display="";
+  el("mesa-ledger").style.display="";
+  loadLedger();
+}
+</script>
+</body>
+</html>
