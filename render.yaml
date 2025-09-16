@@ -5,7 +5,7 @@ services:
     env: node
     plan: free
     buildCommand: npm install
-    startCommand: node scripts/init_db.js && node server.js
+    startCommand: node init_db.js && node server.js
     envVars:
       - key: NODE_VERSION
         value: 18
